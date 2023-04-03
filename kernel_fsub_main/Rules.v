@@ -9,9 +9,11 @@ Inductive typ : Set :=
   | typ_arrow : typ -> typ -> typ
   | typ_all : typ -> typ -> typ
   | typ_mu : typ -> typ
-  | typ_label : var -> typ -> typ     
-  | typ_rcd_nil : typ
-  | typ_rcd_cons : var -> typ -> typ -> typ            
+  | typ_label : var -> typ -> typ   (* should it be used as singleton type *)
+  | typ_single : var -> typ -> typ   
+  | typ_and : typ -> typ -> typ
+  (* | typ_rcd_nil : typ
+  | typ_rcd_cons : var -> typ -> typ -> typ             *)
 .
 
 Coercion typ_bvar : nat >-> typ.
@@ -45,8 +47,10 @@ Fixpoint open_tt_rec (K : nat) (U : typ) (T : typ) {struct T} : typ :=
   | typ_all T1 T2 => typ_all (open_tt_rec K U T1) (open_tt_rec (S K) U T2)
   | typ_mu T        => typ_mu (open_tt_rec (S K) U T)
   | typ_label l T        => typ_label l (open_tt_rec K U T)
-  | typ_rcd_nil     => typ_rcd_nil
-  | typ_rcd_cons i T1 T2  => typ_rcd_cons i (open_tt_rec K U T1) (open_tt_rec K U T2)
+  | typ_single l T        => typ_single l (open_tt_rec K U T)
+  | typ_and A B => typ_and (open_tt_rec K U A) (open_tt_rec K U B)
+  (* | typ_rcd_nil     => typ_rcd_nil
+  | typ_rcd_cons i T1 T2  => typ_rcd_cons i (open_tt_rec K U T1) (open_tt_rec K U T2) *)
   end.
 
 
@@ -54,9 +58,13 @@ Definition open_tt T U := open_tt_rec 0 U T.
 
 Inductive rt_type : typ -> Prop :=
   | rt_type_rcd_nil :
-      rt_type typ_rcd_nil
-  | rt_type_rcd_cons : forall i T1 T2,
-      rt_type (typ_rcd_cons i T1 T2)
+      rt_type typ_top
+  | rt_type_rcd_single : forall i T,
+      rt_type (typ_single i T)
+  | rt_type_rcd_cons : forall T1 T2,
+      rt_type T1 ->
+      rt_type T2 ->
+      rt_type (typ_and T1 T2)
 .
 
 Inductive type : typ -> Prop :=
@@ -80,13 +88,20 @@ Inductive type : typ -> Prop :=
   | type_label: forall l A,
       type A ->
       type (typ_label l A)
-  | type_rcd_nil :
+  | type_single: forall l A,
+      type A ->
+      type (typ_single l A)
+  | type_and: forall A B,
+      type A ->
+      type B ->
+      type (typ_and A B).
+  (* | type_rcd_nil :
       type typ_rcd_nil
   | type_rcd_cons : forall i T1 T2,
       type T1 ->
       type T2 ->
       rt_type T2 ->
-      type (typ_rcd_cons i T1 T2).
+      type (typ_rcd_cons i T1 T2). *)
 
 
 
@@ -100,8 +115,10 @@ Fixpoint subst_tt (Z : atom) (U : typ) (T : typ) {struct T} : typ :=
   | typ_mu T => typ_mu (subst_tt Z U T)
   | typ_label l T => typ_label l (subst_tt Z U T)                     
   | typ_all T1 T2 => typ_all (subst_tt Z U T1) (subst_tt Z U T2)
-  | typ_rcd_nil     => typ_rcd_nil
-  | typ_rcd_cons i T1 T2  => typ_rcd_cons i (subst_tt Z U T1) (subst_tt Z U T2)
+  | typ_single l T => typ_single l (subst_tt Z U T)                     
+  | typ_and A B => typ_and (subst_tt Z U A) (subst_tt Z U B)
+  (* | typ_rcd_nil     => typ_rcd_nil
+  | typ_rcd_cons i T1 T2  => typ_rcd_cons i (subst_tt Z U T1) (subst_tt Z U T2) *)
   end.
 
 Fixpoint fv_tt (T : typ) {struct T} : atoms :=
@@ -114,8 +131,10 @@ Fixpoint fv_tt (T : typ) {struct T} : atoms :=
   | typ_all T1 T2 => (fv_tt T1) `union` (fv_tt T2)                                
   | typ_mu T => (fv_tt T)
   | typ_label l T => (fv_tt T)
-  | typ_rcd_nil     => {}
-  | typ_rcd_cons i T1 T2  => fv_tt T1 \u fv_tt T2
+  | typ_single l T => (fv_tt T)
+  | typ_and A B => (fv_tt A) `union` (fv_tt B)
+  (* | typ_rcd_nil     => {}
+  | typ_rcd_cons i T1 T2  => fv_tt T1 \u fv_tt T2 *)
   end.
 
 Inductive binding : Set :=
@@ -127,14 +146,20 @@ Notation empty := (@nil (atom * binding)).
 
 Fixpoint Tlookup (i':var) (Tr:typ) : option typ :=
   match Tr with
-  | (typ_rcd_cons i T1 T2) =>
-      if i == i' then Some T1 else Tlookup i' T2
+  | (typ_single l T) => 
+      if l == i' then Some T else None
+  | (typ_and A B) =>
+      match Tlookup i' A with
+      | (Some T) => Some T
+      | None => Tlookup i' B
+      end
   | _ => None
   end.
 
 Fixpoint collectLabel (T : typ) : atoms :=
   match T with
-  | (typ_rcd_cons i T1 T2) => {{i}} \u collectLabel T2
+  | (typ_single l T) => {{l}}
+  | (typ_and A B) => collectLabel A \u collectLabel B
   | _ => {}
   end.
 
@@ -168,14 +193,21 @@ Inductive WF : env -> typ -> Prop :=
 | WF_label: forall E A X,
     WF E A ->
     WF E (typ_label X A)
-| WF_rcd_nil : forall E,
+| WF_single: forall E A X,
+    WF E A ->
+    WF E (typ_single X A)
+| WF_and: forall E A B,
+    WF E A ->
+    WF E B ->
+    WF E (typ_and A B)
+(* | WF_rcd_nil : forall E,
       WF E typ_rcd_nil
 | WF_rcd_cons : forall E i T1 T2,
       WF E T1 ->
       WF E T2 ->
       rt_type T2 ->
       i \notin (collectLabel T2) ->
-      WF E (typ_rcd_cons i T1 T2)
+      WF E (typ_rcd_cons i T1 T2) *)
 .
 
 Fixpoint fl_tt (T : typ) {struct T} : atoms :=
@@ -188,8 +220,10 @@ Fixpoint fl_tt (T : typ) {struct T} : atoms :=
   | typ_mu T => (fl_tt T)
   | typ_label X T => {{ X }} `union` fl_tt T
   | typ_all T1 T2 => (fl_tt T1) \u (fl_tt T2)
-  | typ_rcd_nil     => {}
-  | typ_rcd_cons i T1 T2  => {{i}} \u fl_tt T1 \u fl_tt T2
+  | typ_single X T => fl_tt T
+  | typ_and A B => (fl_tt A) `union` (fl_tt B)
+  (* | typ_rcd_nil     => {}
+  | typ_rcd_cons i T1 T2  => {{i}} \u fl_tt T1 \u fl_tt T2 *)
   end.
 
 Fixpoint fv_env (E:env) : atoms :=
@@ -260,14 +294,29 @@ Inductive sub : env -> typ -> typ -> Prop :=
 | sa_label: forall E X A B,
     sub E A B ->
     sub E (typ_label X A) (typ_label X B)
-| sa_rcd: forall A1 A2 E,
+| sa_single: forall E A X B,
+    sub E A B ->
+    sub E (typ_single X A) (typ_single X B)
+| sa_and_a: forall E A B C,
+    WF E B ->
+    sub E A C ->
+    sub E (typ_and A B) C
+| sa_and_b: forall E A B C,
+    WF E A ->
+    sub E B C ->
+    sub E (typ_and A B) C
+| sa_and_both: forall E A B C,
+    sub E A B ->
+    sub E A C ->
+    sub E A (typ_and B C)
+(* | sa_rcd: forall A1 A2 E,
     wf_env E ->
     rt_type A1 ->
     rt_type A2 ->
     collectLabel A2 [<=] collectLabel A1 ->
     WF E A1 -> WF E A2 ->
     (forall i t1 t2, Tlookup i A1 = Some t1 ->  Tlookup i A2 = Some t2 -> sub E t1 t2) ->
-    sub E A1 A2
+    sub E A1 A2 *)
 .
 
 
@@ -412,6 +461,20 @@ Inductive typing : env -> exp -> typ -> Prop :=
       typing G (exp_rcd_proj e i) Ti
   | typing_rcd_nil : forall G,
       wf_env G ->
+      typing G exp_rcd_nil typ_top
+  (* | typing_rcd_single : forall G e1 T1 i,  (* maybe it's redundant， since it can be just something like T /\ \Top *)
+      typing G e1 T1 ->
+      typing G (exp_rcd_cons i e1 exp_rcd_nil) (typ_single i T1) *)
+  | typing_rcd_cons: forall G e1 e2 T1 T2 i,
+      typing G e1 T1 ->
+      typing G e2 T2 ->
+      rt_type T2 ->  (* fixme: do we still need something like rt_type here? *)
+      rt_expr e2 ->
+      i \notin (collectLabele e2) ->
+      typing G (exp_rcd_cons i e1 e2) (typ_and (typ_single i T1) T2)
+
+  (* | typing_rcd_nil : forall G,
+      wf_env G ->
       typing G exp_rcd_nil typ_rcd_nil
   | typing_rcd_cons: forall G e1 e2 T1 T2 i,
       typing G e1 T1 ->
@@ -419,7 +482,7 @@ Inductive typing : env -> exp -> typ -> Prop :=
       rt_type T2 ->
       rt_expr e2 ->
       i \notin (collectLabele e2) ->
-      typing G (exp_rcd_cons i e1 e2) (typ_rcd_cons i T1 T2)
+      typing G (exp_rcd_cons i e1 e2) (typ_rcd_cons i T1 T2) *)
 .
 
 Inductive value : exp -> Prop :=
