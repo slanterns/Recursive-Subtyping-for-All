@@ -13,8 +13,10 @@ Fixpoint subst_label (Z : atom)  (T : typ) {struct T} : typ :=
   | typ_mu T => typ_mu (subst_label Z  T)
   | typ_label l T => if (l==Z) then (typ_fvar Z) else typ_label l (subst_label Z  T)
   | typ_all T1 T2 => typ_all (subst_label Z T1) (subst_label Z T2)
-  | typ_rcd_nil => typ_rcd_nil
-  | typ_rcd_cons i T1 T2 => typ_rcd_cons i (subst_label Z T1) (subst_label Z T2)
+  (* | typ_rcd_nil => typ_rcd_nil *)
+  (* | typ_rcd_cons i T1 T2 => typ_rcd_cons i (subst_label Z T1) (subst_label Z T2) *)
+  | typ_single l T => typ_single l (subst_label Z T)
+  | typ_and T1 T2 => typ_and (subst_label Z T1) (subst_label Z T2)
   end.
 
 Lemma subst_label_open_tt_rec : forall T1 T2 X  k,
@@ -93,6 +95,7 @@ Proof with auto.
   intros.
   induction H...
   constructor...
+  simpl. apply rt_type_rcd_cons...
 Qed.
 
 Lemma subst_label_collect: forall E T i X,
@@ -106,6 +109,7 @@ Proof with auto.
   simpl in *.
   apply notin_union in H1. apply notin_union.
   destruct H1...
+  inversion H...
 Qed.  
 
 Lemma WF_drop_label : forall E1 X E2 T U,
@@ -166,11 +170,8 @@ Proof with auto.
       apply IHWF...
   -
     simpl.
-    apply WF_rcd_cons...
-    + apply IHWF1...
-    + apply IHWF2...
-    + apply subst_label_rt_type...
-    + eapply subst_label_collect... apply H0.
+    apply WF_single... apply IHWF...
+  - apply WF_and...
 Qed.
     
 
@@ -292,7 +293,7 @@ Proof with auto.
   induction H0;try solve [inversion H]...
   simpl in *.
   apply union_iff in H1. apply union_iff.
-  destruct H1...
+  destruct H1; inversion H...
 Qed.  
 
 
@@ -306,8 +307,28 @@ Proof with auto.
   induction H0;try solve [inversion H]...
   simpl in *.
   apply union_iff in H1. apply union_iff.
-  destruct H1...
-Qed.  
+  destruct H1; inversion H...
+Qed.
+
+
+
+Lemma Tlookup_subst_label_none: forall T i X,
+    Tlookup i (subst_label X T) = None ->
+    Tlookup i T = None.
+Proof with auto.
+  induction T;simpl;intros;try solve [inversion H]...
+  - destruct (a == i).
+    -- inversion H.
+    -- auto.
+  - remember (Tlookup i (subst_label X T1)) as TL. destruct TL.
+    -- inversion H.
+    -- replace (Tlookup i T1) with (@None typ).
+       eapply IHT2. apply H. {
+         symmetry. eapply IHT1. symmetry. apply HeqTL.
+       }
+Qed.
+
+
 
 Lemma Tlookup_subst_label: forall T i X t ,
     Tlookup i (subst_label X T) = Some t ->
@@ -316,8 +337,14 @@ Proof with auto.
   induction T;simpl;intros;try solve [inversion H]...
   - destruct (a == X). { inversion H. } inversion H.
   - destruct (a == i).
-    + inversion H. exists T1...
-    + apply IHT2 in H...
+    + inversion H. exists T...
+    + inversion H.
+  - remember (Tlookup i (subst_label X T1)) as TL. destruct TL.
+    -- inversion H. subst. destruct (IHT1 i X t) as [t' [IHT11 IHT12]]...
+       exists t'. split... rewrite IHT12...
+    -- destruct (IHT2 i X t) as [t'' [IHT21 IHT22]]... exists t''.
+       split... replace (Tlookup i T1) with (@None typ)...
+       symmetry. eapply Tlookup_subst_label_none. symmetry. apply HeqTL.
 Qed.
 
 
@@ -395,9 +422,10 @@ Proof with eauto.
     destruct (X0==X);subst...
     constructor...
     apply wf_env_drop_label...
-  -
-    dependent destruction H1;
-    dependent destruction H0;simpl...
+  - apply sa_and_a... apply WF_drop_label...
+  - apply sa_and_b... apply WF_drop_label...
+    (* dependent destruction H1. fsetdec.
+    dependent destruction H0;simpl... apply A0.
     + constructor...
       { apply wf_env_drop_label... }
       { intros. inversion H0. }
@@ -438,7 +466,7 @@ Proof with eauto.
             as [t2' [? ?]]... subst t2.
         specialize (H6 _ _ _ H9 H10).
         apply H6...
-      }
+      } *)
 Qed.
 
 
@@ -607,8 +635,12 @@ Proof with eauto.
       apply H2 with (X1:=X) (U0:=U)...
       solve_notin.
       rewrite_env (X0 ~ bind_sub typ_top ++ E1 ++ E2)...
-  -
-    apply sa_rcd...
+  - apply sa_and_a... eapply WF_strengthening.
+    -- apply H.
+    -- fsetdec.
+    -- apply H2.
+  - apply sa_and_b... eapply WF_strengthening... apply H.
+    (* apply sa_rcd...
     + apply WF_strengthening in H3...
     + apply WF_strengthening in H4...
     + intros. apply H6 with (i:=i) (X0:=X) (U0:=U)...
@@ -616,7 +648,7 @@ Proof with eauto.
       apply Tlookup_fv_tt in H10...
       solve_notin.
       * intros C. apply H9 in C...
-      * intros C. apply H10 in C...
+      * intros C. apply H10 in C... *)
 Qed.
 
 Lemma sub_strengthening_env: forall E1 E2 A B,
