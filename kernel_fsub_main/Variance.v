@@ -313,7 +313,7 @@ Proof with auto.
 Qed.
 
 
-Lemma Tlookup_subst: forall E A i X C T,
+(* Lemma Tlookup_subst: forall E A i X C T,
     WF E A ->
     rt_type A ->
     Tlookup i (subst_tt X C A) = Some T ->
@@ -331,11 +331,11 @@ Proof with auto.
     destruct (X0==i)...
     subst.
     inversion H1...
-Admitted.
+Admitted. *)
 (* Qed. *)
 
 
-Lemma Tlookup_subst_tl: forall E A i X C T,
+(* Lemma Tlookup_subst_tl: forall E A i X C T,
     WF E A ->
     rt_type A ->
     Tlookup i (subst_tl X C A) = Some T ->
@@ -353,7 +353,7 @@ Proof with auto.
     destruct (X0==i)...
     subst.
     inversion H1...
-Admitted.
+Admitted. *)
 (* Qed. *)
 
 

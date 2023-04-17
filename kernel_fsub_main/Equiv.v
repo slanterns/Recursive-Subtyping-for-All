@@ -248,6 +248,10 @@ Proof with auto.
       apply IHtype4rec...
   -
     destruct_hypos. get_well_form.
+    inversion H. subst.
+    destruct (IHtype4rec E H9 C D X).
+    split.
+    -- apply sa_single.
     split;apply Reflexivity...
   -
     dependent destruction H0.

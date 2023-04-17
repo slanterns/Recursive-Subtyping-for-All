@@ -639,7 +639,7 @@ Proof with auto.
   exists x...
 Qed.   *)
 
-Lemma rcd_inversion: forall A B E,
+(* Lemma rcd_inversion: forall A B E,
     sub E A B ->
     rt_type A ->
     rt_type B ->
@@ -654,7 +654,7 @@ Proof with auto.
   - inversion H0. apply IHsub... rewrite <- H5.
   apply H9 with (i:=i)... *)
 (* Qed. *)
-Admitted.
+Admitted. *)
 
 Fixpoint dropLabel (Z : atom) (T : typ) {struct T} : typ :=
   match T with
