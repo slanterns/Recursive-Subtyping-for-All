@@ -300,33 +300,26 @@ Proof with auto.
 Qed.
 
 
-Lemma and_transitivity : forall E T1 T2 S T,
-  type4rec T1 ->
-  type4rec T2 ->
-  (forall (E : env) (T : typ),
-    sub E T1 T ->
-    forall S : typ, sub E S T1 -> sub E S T) ->
-  (forall (E : env) (T : typ),
-    sub E T2 T ->
-    forall S : typ, sub E S T2 -> sub E S T) ->
-  sub E (typ_and T1 T2) T ->
-  sub E S (typ_and T1 T2) ->
-  sub E S T.
+Lemma transitivity_on_and : forall T1 T2,
+  transitivity_on T1 ->
+  transitivity_on T2 ->
+  transitivity_on (typ_and T1 T2).
 Proof with auto.
+  unfold transitivity_on.
   intros.
-  dependent induction H3...
+  dependent induction H2...
   - constructor... get_well_form...
-  - clear IHsub. dependent induction H5...
+  - clear IHsub. dependent induction H1...
     -- apply sa_trans_tvar with (U:=U)... apply IHsub with (T3:=T2) (T4:=T1)...
     -- apply sa_and_a... eapply IHsub with (T3:=T2) (T4:=T1)...
     -- apply sa_and_b... eapply IHsub with (T3:=T2) (T4:=T1)...
-  - clear IHsub. dependent induction H5...
+  - clear IHsub. dependent induction H1...
     -- apply sa_trans_tvar with (U:=U)... apply IHsub with (T3:=T2) (T4:=T1)...
     -- apply sa_and_a... eapply IHsub with (T3:=T2) (T4:=T1)...
     -- apply sa_and_b... eapply IHsub with (T3:=T2) (T4:=T1)...
   - apply sa_and_both.
-    -- eapply IHsub1. apply H0. eauto. eauto. eauto. eauto. apply H4.
-    -- eapply IHsub2. apply H0. eauto. eauto. eauto. eauto. apply H4.
+    -- eapply IHsub1. apply H0. apply H. assumption. reflexivity.
+    -- eapply IHsub2. apply H0. apply H. assumption. reflexivity.
 Qed.
 
 
@@ -442,7 +435,8 @@ Proof with auto.
     + apply sa_and_both.
       -- eapply IHsub1; eauto.
       -- eapply IHsub2; eauto.
-  - apply and_transitivity with (T1:=T1) (T2:=T2)...
+  - apply transitivity_on_and with (T1:=T1) (T2:=T2);
+    unfold transitivity_on...
 Qed.
 
 Lemma sub_narrowing : forall Q E F Z P S T,
